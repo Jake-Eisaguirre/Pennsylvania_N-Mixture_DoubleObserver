@@ -148,8 +148,7 @@ nmix_clean <- nmix_raw_visits %>%
   left_join(visits, by = c("site", "date", "obs_n")) %>% 
   drop_na(species_ves) %>% 
   mutate(season = if_else(date < "2023-06-21", "spring", "summer")) %>% 
-  unite(site, c("site", "obs_n"), sep = "_")
-
+  unite(site, c("site", "obs_n"), sep = "_") 
 ```
 
 ## Now loop through each species and pivot 
@@ -157,8 +156,15 @@ nmix_clean <- nmix_raw_visits %>%
 
 nmix_table <- nmix_clean %>% 
   filter(species_ves == "rana_catesbeiana") %>%
-  select(!c(species_ves, season)) %>% 
-  pivot_wider(names_from = c("n_visit"), values_from = c("n"))
+  select(!c(species_ves, season)) 
+  
+  # group_by(site, n_visit) %>%    
+  # summarise(n_sum = sum(n)) %>%    
+  # pivot_wider(id_cols = site, names_from = n_visit, values_from = n_sum, values_fill = c(n_sum = 0))
+  # 
+
+
+
 
 
 ```
