@@ -13,7 +13,7 @@ if (!require(librarian)){
   library(librarian)
 }
 
-librarian::shelf(tidyverse, RPostgres, DBI, unmarked, here, lubridate)
+librarian::shelf(tidyverse, RPostgres, DBI, unmarked, here, lubridate, tidyr)
 
 ```
 
@@ -59,8 +59,9 @@ nmix_q <- "select r.region, s.site, s.area_sqr_m, v.date, v.survey_time, s2.dura
 
 nmix_raw_data <- dbGetQuery(connection, nmix_q) %>% 
   select(!c(region, survey_time)) %>% 
-  arrange(date) 
-
+  arrange(date) %>% 
+  mutate(species_ves = str_remove_all(species_ves, "\\."),
+         species_ves = if_else(species_ves == "desmog_spp", "desmongnathus_sp", species_ves))
 
 
 # find all visits
@@ -73,14 +74,13 @@ visit_nmix_q <- "select r.region, s.site, v.date, v.survey_time, s2.detection_ty
                 and v.date > '2023-01-01'
                 and s2.detection_type = 'visual';"
 
-nmix_raw_visits <-dbGetQuery(connection, visit_nmix_q) %>% 
-  arrange(date) %>% 
-  select(site, date)
+
+nmix_raw_visits <-dbGetQuery(connection, visit_nmix_q) 
 
 
 ```
 
-## Visualize all VES Visits
+## Visualize all VES 
 ```{r}
 
 viz <- nmix_raw_visits %>% 
@@ -91,4 +91,63 @@ ggplot(data = viz) +
   geom_col(aes(x=site, y = n)) +
   ggtitle("Raw Visits")
 
+viz <- nmix_raw_data %>% 
+  group_by(site, date, species_ves) %>% 
+  summarise(n = n())
+
+ggplot(data = viz) +
+  geom_col(aes(x=site, y = n, fill = species_ves)) +
+  ggtitle("Raw Visits")
+
 ```
+
+
+## Sum across date, site, species, and observer. Then populate zeroes for dates visisted with no encounters and count number of observers per visit
+```{r}
+
+# prep raw visit table for number of visits and number of observers
+ndays <- 3
+nmix_raw_visits <- nmix_raw_visits %>% 
+  arrange(date) %>% 
+  select(site, date, observer) %>% 
+  mutate(near = (lag(date, default = first(date)) + ndays < date) |> cumsum(), .by = site) %>%  
+  mutate(n_visit = rep(list(1,2,3), length.out = n()), .by = c(site, near),
+         n_visit = paste("visit_", n_visit, sep=""),
+         observer = if_else(observer == "", "Myah Madril, Rachel Verdi", observer)) %>% 
+  arrange(site) %>% 
+  select(!c(near)) %>% 
+  mutate(observer = strsplit(as.character(observer), ",")) %>%
+  unnest(observer) %>% 
+  group_by(site, date) %>% 
+  mutate(obs_n = match(observer, unique(observer)),
+         obs_n = paste0("obs_", obs_n, sep = "")) %>% 
+  ungroup() %>% 
+  select(!c(observer))
+
+# sum counts across observers and count number of obs
+n_mix_mid_clean_up <- nmix_raw_data %>% 
+  group_by(date, site, observer, species_ves) %>% 
+  reframe(n = sum(count)) %>% 
+  group_by(site, date) %>% 
+  mutate(obs_n = match(observer, unique(observer)),
+         obs_n = paste0("obs_", obs_n, sep = "")) %>% 
+  ungroup() %>% 
+  select(!c(observer))
+
+# pull out visits
+visits <- nmix_raw_visits %>% 
+  select(site, date, obs_n, n_visit)
+
+#join counts on raw_visits and populate zeroes per date, site, obs_n
+nmix_clean <- nmix_raw_visits %>% 
+  left_join(n_mix_mid_clean_up, by = c("date", "site", "obs_n")) %>% 
+  complete(nesting(date, site, obs_n), 
+           species_ves = unique(n_mix_mid_clean_up$species_ves), 
+           fill = list(n = 0)) %>% 
+  select(!c(n_visit)) %>% 
+  left_join(visits, by = c("site", "date", "obs_n")) %>% 
+  drop_na(species_ves) %>% 
+  mutate(season = if_else(date < "2023-06-21", "spring", "summer"))
+
+```
+
