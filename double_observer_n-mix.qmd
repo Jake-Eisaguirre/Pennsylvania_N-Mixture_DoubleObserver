@@ -75,7 +75,7 @@ visit_nmix_q <- "select r.region, s.site, v.date, v.survey_time, s2.detection_ty
                 and s2.detection_type = 'visual';"
 
 
-nmix_raw_visits <-dbGetQuery(connection, visit_nmix_q) 
+nmix_raw_visits_q <-dbGetQuery(connection, visit_nmix_q) 
 
 
 ```
@@ -107,7 +107,7 @@ ggplot(data = viz) +
 
 # prep raw visit table for number of visits and number of observers
 ndays <- 3
-nmix_raw_visits <- nmix_raw_visits %>% 
+nmix_raw_visits <- nmix_raw_visits_q %>% 
   arrange(date) %>% 
   select(site, date, observer) %>% 
   mutate(near = (lag(date, default = first(date)) + ndays < date) |> cumsum(), .by = site) %>%  
@@ -147,7 +147,20 @@ nmix_clean <- nmix_raw_visits %>%
   select(!c(n_visit)) %>% 
   left_join(visits, by = c("site", "date", "obs_n")) %>% 
   drop_na(species_ves) %>% 
-  mutate(season = if_else(date < "2023-06-21", "spring", "summer"))
+  mutate(season = if_else(date < "2023-06-21", "spring", "summer")) %>% 
+  unite(site, c("site", "obs_n"), sep = "_")
 
 ```
+
+## Now loop through each species and pivot 
+```{r}
+
+nmix_table <- nmix_clean %>% 
+  filter(species_ves == "rana_catesbeiana") %>%
+  select(!c(species_ves, season)) %>% 
+  pivot_wider(names_from = c("n_visit"), values_from = c("n"))
+
+
+```
+
 
