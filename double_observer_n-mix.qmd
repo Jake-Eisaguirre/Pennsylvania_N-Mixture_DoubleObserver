@@ -1,0 +1,94 @@
+---
+title: "Double Observer N-Mix"
+format: html
+editor: source
+---
+
+## Load Packages
+
+```{r}
+#| output: false
+if (!require(librarian)){
+  install.packages("librarian")
+  library(librarian)
+}
+
+librarian::shelf(tidyverse, RPostgres, DBI, unmarked, here, lubridate)
+
+```
+
+## Connect to `survey_data` schema in `ribbitr` database
+```{r}
+#| output: false
+tryCatch({
+    drv <- dbDriver("Postgres")
+    print("Connecting to Database…")
+    connection <- dbConnect(drv,
+                 dbname = Sys.getenv("aws_dbname"),
+                 host = Sys.getenv("aws_host"),
+                 port = Sys.getenv("aws_port"),
+                 user = Sys.getenv("aws_user"),
+                 password = Sys.getenv("aws_password"),
+                 timezone=NULL)
+    print("Database Connected!")
+    },
+    error=function(cond) {
+            print("Unable to connect to Database.")
+    })
+
+#search path
+dbExecute(connection, "set search_path to survey_data")
+
+
+
+```
+
+## Query 2022 N-Mix Penn data
+```{r}
+
+# Data
+nmix_q <- "select r.region, s.site, s.area_sqr_m, v.date, v.survey_time, s2.duration_minutes, 
+          v2.species_ves, v2.count, v2.observer, s2.air_temp_c, s2.water_temp_c, s2.wind, s2.sky, s2.relative_humidity_percent
+          from region r
+          join site s on r.region_id = s.region_id 
+          full join visit v on s.site_id = v.site_id 
+          join survey s2 on v.visit_id = s2.visit_id 
+          join ves v2 on s2.survey_id = v2.survey_id
+          where r.region = 'pennsylvania'
+          and v.date > '2023-01-01';"
+
+nmix_raw_data <- dbGetQuery(connection, nmix_q) %>% 
+  select(!c(region, survey_time)) %>% 
+  arrange(date) 
+
+
+
+# find all visits
+visit_nmix_q <- "select r.region, s.site, v.date, v.survey_time, s2.detection_type, s2.observer
+                from region r
+                join site s on r.region_id = s.region_id 
+                join visit v on s.site_id = v.site_id 
+                join survey s2 on v.visit_id = s2.visit_id
+                where r.region = 'pennsylvania'
+                and v.date > '2023-01-01'
+                and s2.detection_type = 'visual';"
+
+nmix_raw_visits <-dbGetQuery(connection, visit_nmix_q) %>% 
+  arrange(date) %>% 
+  select(site, date)
+
+
+```
+
+## Visualize all VES Visits
+```{r}
+
+viz <- nmix_raw_visits %>% 
+  group_by(site) %>% 
+  summarise(n = n())
+
+ggplot(data = viz) +
+  geom_col(aes(x=site, y = n)) +
+  ggtitle("Raw Visits")
+
+```
