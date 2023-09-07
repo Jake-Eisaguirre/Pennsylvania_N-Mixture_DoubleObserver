@@ -75,7 +75,11 @@ visit_nmix_q <- "select r.region, s.site, v.date, v.survey_time, s2.detection_ty
                 and s2.detection_type = 'visual';"
 
 
-nmix_raw_visits_q <-dbGetQuery(connection, visit_nmix_q) 
+nmix_raw_visits_q <-dbGetQuery(connection, visit_nmix_q) %>% 
+  mutate(observer = if_else(site == "rv_pond" & date == "2023-06-05",
+                            "Jae,Rachel Verdi", observer),
+         observer = if_else(site == "rv_pond" & date == "2023-06-06",
+                            "Jae,Rachel Verdi,Luci Anaya", observer))
 
 # co-variates
 cov_q <- "select r.region, s.site, s.area_sqr_m, v.date, v.survey_time, s2.air_temp_c, s2.water_temp_c, s2.wind, 
@@ -97,21 +101,21 @@ covs <- dbGetQuery(connection, cov_q) %>%
 ## Visualize all VES 
 ```{r}
 
-viz <- nmix_raw_visits %>% 
-  group_by(site) %>% 
-  summarise(n = n())
-
-ggplot(data = viz) +
-  geom_col(aes(x=site, y = n)) +
-  ggtitle("Raw Visits")
-
-viz <- nmix_raw_data %>% 
-  group_by(site, date, species_ves) %>% 
-  summarise(n = n())
-
-ggplot(data = viz) +
-  geom_col(aes(x=site, y = n, fill = species_ves)) +
-  ggtitle("Raw Visits")
+# viz <- nmix_raw_visits %>% 
+#   group_by(site) %>% 
+#   summarise(n = n())
+# 
+# ggplot(data = viz) +
+#   geom_col(aes(x=site, y = n)) +
+#   ggtitle("Raw Visits")
+# 
+# viz <- nmix_raw_data %>% 
+#   group_by(site, date, species_ves) %>% 
+#   summarise(n = n())
+# 
+# ggplot(data = viz) +
+#   geom_col(aes(x=site, y = n, fill = species_ves)) +
+#   ggtitle("Raw Visits")
 
 ```
 
@@ -164,7 +168,7 @@ area_cov <- covariates %>%
   unique()
 
 #join counts on raw_visits and populate zeroes per date, site, obs_n
-nmix_clean <- nmix_raw_visits %>% 
+nmix_clean <-  nmix_raw_visits %>% 
   left_join(n_mix_mid_clean_up, by = c("date", "site", "obs_n")) %>% 
   complete(nesting(date, site, obs_n, visit_group), 
            species_ves = unique(n_mix_mid_clean_up$species_ves), 
@@ -189,14 +193,14 @@ nmix_clean <- nmix_raw_visits %>%
 
 nmix_table <- nmix_clean %>% 
   filter(species_ves == "rana_catesbeiana") %>%
-  select(!c(species_ves, season)) %>% 
-  pivot_wider(id_cols = c("site", "visit_group", "area_sqr_m"), names_from = n_visit, values_from = n) %>% 
+  select(!c(species_ves)) %>% 
+  pivot_wider(id_cols = c("site", "visit_group", "area_sqr_m", "season"), names_from = n_visit, values_from = n) %>% 
   select(!c(site, visit_group))
 
 
 
-umf <- unmarkedFramePCount(y = nmix_table[2:11],
-                           siteCovs = nmix_table[1:1])
+umf <- unmarkedFramePCount(y = nmix_table[5:14],
+                           siteCovs = nmix_table[3:3])
 
 fm1 <- pcount(~1 ~1, 
               data = umf,
