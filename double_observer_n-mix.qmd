@@ -167,6 +167,15 @@ area_cov <- covariates %>%
   select(site, area_sqr_m) %>% 
   unique()
 
+#air temp
+air_temp <- covariates %>% 
+  select(site, date, air_temp_c)
+
+#Julian date
+j_date <- covariates %>% 
+  select(site, date) %>% 
+  mutate(j_date = yday(date))
+
 #join counts on raw_visits and populate zeroes per date, site, obs_n
 nmix_clean <-  nmix_raw_visits %>% 
   left_join(n_mix_mid_clean_up, by = c("date", "site", "obs_n")) %>% 
@@ -184,7 +193,9 @@ nmix_clean <-  nmix_raw_visits %>%
                              obs_n == "obs_1" ~ n_visit)) %>% 
   arrange(n_visit) %>% 
   mutate(n_visit = paste("visit_", n_visit, sep = "")) %>% 
-  left_join(area_cov, by = c("site"))
+  left_join(area_cov, by = c("site")) %>% 
+  left_join(air_temp, by = c("site", "date")) %>% 
+  left_join(j_date, by = c("site", "date"))
 
 ```
 
@@ -199,8 +210,8 @@ nmix_table <- nmix_clean %>%
 
 
 
-umf <- unmarkedFramePCount(y = nmix_table[5:14],
-                           siteCovs = nmix_table[3:3])
+umf <- unmarkedFramePCount(y = nmix_table[3:12],
+                           siteCovs = nmix_table[1:1])
 
 fm1 <- pcount(~1 ~1, 
               data = umf,
