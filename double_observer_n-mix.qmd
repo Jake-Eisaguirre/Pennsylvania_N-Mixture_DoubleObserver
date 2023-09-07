@@ -48,7 +48,7 @@ dbExecute(connection, "set search_path to survey_data")
 
 # Data
 nmix_q <- "select r.region, s.site, s.area_sqr_m, v.date, v.survey_time, s2.duration_minutes, 
-          v2.species_ves, v2.count, v2.observer, s2.air_temp_c, s2.water_temp_c, s2.wind, s2.sky, s2.relative_humidity_percent
+          v2.species_ves, v2.count, v2.observer
           from region r
           join site s on r.region_id = s.region_id 
           full join visit v on s.site_id = v.site_id 
@@ -76,6 +76,20 @@ visit_nmix_q <- "select r.region, s.site, v.date, v.survey_time, s2.detection_ty
 
 
 nmix_raw_visits_q <-dbGetQuery(connection, visit_nmix_q) 
+
+# co-variates
+cov_q <- "select r.region, s.site, s.area_sqr_m, v.date, v.survey_time, s2.air_temp_c, s2.water_temp_c, s2.wind, 
+          s2.sky, s2.relative_humidity_percent
+          from region r
+          join site s on r.region_id = s.region_id 
+          join visit v on s.site_id = v.site_id 
+          join survey s2 on v.visit_id = s2.visit_id
+          where r.region = 'pennsylvania'
+          and v.date > '2023-01-01'
+          and s2.detection_type = 'visual';"
+
+covs <- dbGetQuery(connection, cov_q) %>% 
+  mutate(area_sqr_m = if_else(site == "tryon_weber", 100, area_sqr_m))
 
 
 ```
@@ -106,7 +120,7 @@ ggplot(data = viz) +
 ```{r}
 
 # prep raw visit table for number of visits and number of observers
-ndays <- 3
+ndays <- 1
 nmix_raw_visits <- nmix_raw_visits_q %>% 
   arrange(date) %>% 
   select(site, date, observer) %>% 
@@ -139,6 +153,16 @@ n_mix_mid_clean_up <- nmix_raw_data %>%
 visits <- nmix_raw_visits %>% 
   select(site, date, obs_n, n_visit)
 
+# covariates
+covariates <- covs %>% 
+  select(site, date, area_sqr_m, water_temp_c, air_temp_c)
+
+
+ # area
+area_cov <- covariates %>% 
+  select(site, area_sqr_m) %>% 
+  unique()
+
 #join counts on raw_visits and populate zeroes per date, site, obs_n
 nmix_clean <- nmix_raw_visits %>% 
   left_join(n_mix_mid_clean_up, by = c("date", "site", "obs_n")) %>% 
@@ -148,16 +172,16 @@ nmix_clean <- nmix_raw_visits %>%
   select(!c(n_visit)) %>% 
   left_join(visits, by = c("site", "date", "obs_n")) %>% 
   drop_na(species_ves) %>% 
-  mutate(season = if_else(date < "2023-06-21", "spring", "summer")) 
+  mutate(season = if_else(date < "2023-06-21", "spring", "summer"),
+         n_visit = as.numeric(str_remove(n_visit, "visit_")),
+         n_visit = case_when(obs_n == "obs_2" ~ n_visit + 3,
+                             obs_n == "obs_3" ~ n_visit + 6,
+                             obs_n == "obs_4" ~ n_visit + 9,
+                             obs_n == "obs_1" ~ n_visit)) %>% 
+  arrange(n_visit) %>% 
+  mutate(n_visit = paste("visit_", n_visit, sep = "")) %>% 
+  left_join(area_cov, by = c("site"))
 
-# %>% 
-#   unite(month_day, c("month", "day"), sep ="-") %>% 
-#   unite(site, c("site", "month_day"), sep = "_")
-
-# %>% 
-#   unite(site, c("site", "obs_n"), sep = "_") %>% 
-#   group_by(.) %>% 
-#   filter(all(c("visit_1", ...) %in% n_visit))
 ```
 
 ## Now loop through each species and pivot 
@@ -166,17 +190,18 @@ nmix_clean <- nmix_raw_visits %>%
 nmix_table <- nmix_clean %>% 
   filter(species_ves == "rana_catesbeiana") %>%
   select(!c(species_ves, season)) %>% 
-  pivot_wider(id_cols = c("site", "obs_n", "visit_group"), names_from = n_visit, values_from = n) %>% 
-  drop_na(visit_1) %>% 
-  drop_na(visit_2) %>% 
-  select(!c(site, obs_n, visit_group))
+  pivot_wider(id_cols = c("site", "visit_group", "area_sqr_m"), names_from = n_visit, values_from = n) %>% 
+  select(!c(site, visit_group))
 
-umf <- unmarkedFramePCount(y = nmix_table)
+
+
+umf <- unmarkedFramePCount(y = nmix_table[2:11],
+                           siteCovs = nmix_table[1:1])
 
 fm1 <- pcount(~1 ~1, 
               data = umf,
               engine = "R",
-               control=list(trace=T, REPORT=5))
+              control=list(trace=T, REPORT=5))
 
 backTransform(fm1, "state")
 backTransform(fm1, "det")
