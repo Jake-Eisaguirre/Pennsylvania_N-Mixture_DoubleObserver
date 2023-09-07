@@ -166,16 +166,20 @@ nmix_clean <- nmix_raw_visits %>%
 nmix_table <- nmix_clean %>% 
   filter(species_ves == "rana_catesbeiana") %>%
   select(!c(species_ves, season)) %>% 
-  pivot_wider(id_cols = c("site", "obs_n", "visit_group"), names_from = n_visit, values_from = n) 
+  pivot_wider(id_cols = c("site", "obs_n", "visit_group"), names_from = n_visit, values_from = n) %>% 
+  drop_na(visit_1) %>% 
+  drop_na(visit_2) %>% 
+  select(!c(site, obs_n, visit_group))
 
-  # group_by(site, n_visit) %>%    
-  # summarise(n_sum = sum(n)) %>%    
-  # pivot_wider(id_cols = site, names_from = n_visit, values_from = n_sum, values_fill = c(n_sum = 0))
-  # 
+umf <- unmarkedFramePCount(y = nmix_table)
 
+fm1 <- pcount(~1 ~1, 
+              data = umf,
+              engine = "R",
+               control=list(trace=T, REPORT=5))
 
-
-
+backTransform(fm1, "state")
+backTransform(fm1, "det")
 
 ```
 
