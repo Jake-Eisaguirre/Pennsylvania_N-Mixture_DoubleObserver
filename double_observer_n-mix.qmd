@@ -111,7 +111,8 @@ nmix_raw_visits <- nmix_raw_visits_q %>%
   arrange(date) %>% 
   select(site, date, observer) %>% 
   mutate(near = (lag(date, default = first(date)) + ndays < date) |> cumsum(), .by = site) %>%  
-  mutate(n_visit = rep(list(1,2,3), length.out = n()), .by = c(site, near),
+  mutate(n_visit = rep(list(1,2,3), length.out = n()), .by = c(site, near)) %>% 
+  mutate(visit_group = cumsum(n_visit == 1), .by = site,
          n_visit = paste("visit_", n_visit, sep=""),
          observer = if_else(observer == "", "Myah Madril, Rachel Verdi", observer)) %>% 
   arrange(site) %>% 
@@ -141,14 +142,22 @@ visits <- nmix_raw_visits %>%
 #join counts on raw_visits and populate zeroes per date, site, obs_n
 nmix_clean <- nmix_raw_visits %>% 
   left_join(n_mix_mid_clean_up, by = c("date", "site", "obs_n")) %>% 
-  complete(nesting(date, site, obs_n), 
+  complete(nesting(date, site, obs_n, visit_group), 
            species_ves = unique(n_mix_mid_clean_up$species_ves), 
            fill = list(n = 0)) %>% 
   select(!c(n_visit)) %>% 
   left_join(visits, by = c("site", "date", "obs_n")) %>% 
   drop_na(species_ves) %>% 
-  mutate(season = if_else(date < "2023-06-21", "spring", "summer")) %>% 
-  unite(site, c("site", "obs_n"), sep = "_") 
+  mutate(season = if_else(date < "2023-06-21", "spring", "summer")) 
+
+# %>% 
+#   unite(month_day, c("month", "day"), sep ="-") %>% 
+#   unite(site, c("site", "month_day"), sep = "_")
+
+# %>% 
+#   unite(site, c("site", "obs_n"), sep = "_") %>% 
+#   group_by(.) %>% 
+#   filter(all(c("visit_1", ...) %in% n_visit))
 ```
 
 ## Now loop through each species and pivot 
@@ -156,8 +165,9 @@ nmix_clean <- nmix_raw_visits %>%
 
 nmix_table <- nmix_clean %>% 
   filter(species_ves == "rana_catesbeiana") %>%
-  select(!c(species_ves, season)) 
-  
+  select(!c(species_ves, season)) %>% 
+  pivot_wider(id_cols = c("site", "obs_n", "visit_group"), names_from = n_visit, values_from = n) 
+
   # group_by(site, n_visit) %>%    
   # summarise(n_sum = sum(n)) %>%    
   # pivot_wider(id_cols = site, names_from = n_visit, values_from = n_sum, values_fill = c(n_sum = 0))
