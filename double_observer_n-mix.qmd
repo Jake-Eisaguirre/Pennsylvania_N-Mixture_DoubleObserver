@@ -102,6 +102,8 @@ covs <- dbGetQuery(connection, cov_q) %>%
 ```
 
 
+# Stack Observers into one row
+
 ## Sum across date, site, species, and observer. Then populate zeroes for dates visisted with no encounters and count number of observers per visit
 ```{r}
 
@@ -183,6 +185,8 @@ nmix_clean <-  nmix_raw_visits %>%
 
 ## Now loop through each species and pivot 
 ```{r}
+#| warning: false
+
 spec_list <- unique(nmix_clean$species_ves)
 
 lambda_results <- vector('list', length(spec_list))
@@ -237,4 +241,105 @@ detection_results
 
 ```
 
+# Observers as Seperate rows
+
+## Wrangle above data correctly
+```{r}
+
+nmix_clean_sep <-  nmix_raw_visits %>% 
+  left_join(n_mix_mid_clean_up, by = c("date", "site", "obs_n")) %>% 
+  complete(nesting(date, site, obs_n, visit_group), 
+           species_ves = unique(n_mix_mid_clean_up$species_ves), 
+           fill = list(n = 0)) %>% 
+  select(!c(n_visit)) %>% 
+  left_join(visits, by = c("site", "date", "obs_n")) %>% 
+  drop_na(species_ves) %>% 
+  mutate(season = if_else(date < "2023-06-21", "spring", "summer")) %>% 
+  arrange(n_visit) %>% 
+  #mutate(n_visit = paste("visit_", n_visit, sep = "")) %>% 
+  left_join(area_cov, by = c("site")) %>% 
+  left_join(air_temp, by = c("site", "date")) %>% 
+  left_join(j_date, by = c("site", "date"))
+
+
+```
+
+## Model
+```{r}
+#| warning: false
+
+spec_list <- unique(nmix_clean$species_ves)
+
+lambda_results <- vector('list', length(spec_list))
+detection_results <- vector('list', length(spec_list))
+
+for (i in 1:length(spec_list)){
+  
+  nmix_table <- nmix_clean_sep %>% 
+    filter(species_ves == spec_list[i]) %>%
+    select(!c(species_ves)) %>% 
+    pivot_wider(id_cols = c("site", "visit_group", "obs_n", "area_sqr_m", "season"), names_from = n_visit, values_from = n) %>% 
+    drop_na(visit_2) %>% 
+    #drop_na(visit_1) %>%  # What to do about observer who was only there for the second repeat day but not 1st or 2nd?
+    select(!c(obs_n, visit_group, area_sqr_m))
+  
+  obsCovs <- nmix_clean_sep %>% 
+    select(site, visit_group, obs_n, n_visit, season, air_temp_c, j_date, species_ves) %>% 
+    filter(species_ves == spec_list[i]) %>%
+    select(!c(species_ves)) %>% 
+    pivot_wider(id_cols = c("site", "visit_group", "obs_n", "season"), names_from = n_visit, 
+                values_from = c(air_temp_c, j_date)) %>% 
+    drop_na(j_date_visit_2) %>% 
+    #drop_na(visit_1) %>%  # What to do about observer who was only there for the second repeat day but not 1st or 2nd?
+    select(!c(obs_n, visit_group)) %>% 
+    mutate(site_visit_1 = site,
+           site_visit_2 = site,
+           site_visit_3 = site,
+           season_visit_1 = season,
+           season_visit_2 = season,
+           seas_visit_3 = season) %>% 
+    select(!c(site, season))
+  
+  
+  
+  umf <- unmarkedFramePCount(y = nmix_table[3:5],
+                            siteCovs = nmix_table[1:3],
+                            obsCovs = list(air_temp = obsCovs[1:3],
+                                           date = obsCovs[4:6],
+                                           site = obsCovs[7:9],
+                                           season = obsCovs[10:12]))
+  
+  
+  
+  fm1 <- pcount(~air_temp ~ site, 
+                data = umf,
+                K = 150)
+  
+  lam <- plogis(coef(fm1, type = "state"))
+  lambda_results[[i]] <- lam
+  
+  det <- plogis(coef(fm1, "det"))
+  detection_results[[i]] <- det
+  
+  
+  # Error checking during loop
+  print(paste("done with", spec_list[i]))
+
+}
+
+detection_results <- setNames(detection_results, c(spec_list))
+
+lambda_results <- setNames(lambda_results, c(spec_list))
+
+                                                                                                                       
+```
+## View Model Results
+```{r}
+# Transformed Abundance
+lambda_results
+
+# Detection
+detection_results
+
+```
 
