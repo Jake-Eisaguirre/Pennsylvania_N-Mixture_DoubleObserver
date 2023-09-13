@@ -206,8 +206,8 @@ for (i in 1:length(spec_list)) {
       
   umf <- unmarkedFramePCount(y = nmix_table[4:12],
                              siteCovs = nmix_table[1:3])
-      
-  fm1 <- pcount(~1 ~ site, 
+      # -1 + 
+  fm1 <- pcount(~ 1 ~ site, 
                 data = umf,
                 K = 150)
       
