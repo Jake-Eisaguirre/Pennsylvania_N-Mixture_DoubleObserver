@@ -181,6 +181,8 @@ nmix_clean <-  nmix_raw_visits %>%
   left_join(air_temp, by = c("site", "date")) %>% 
   left_join(j_date, by = c("site", "date"))
 
+#write_csv(nmix_clean, here("nmix_clean.csv"))
+
 ```
 
 ## Now loop through each species and pivot 
@@ -261,14 +263,14 @@ nmix_clean_sep <-  nmix_raw_visits %>%
   left_join(air_temp, by = c("site", "date")) %>% 
   left_join(j_date, by = c("site", "date"))
 
-
+#write_csv(nmix_clean_sep, here("nmix_clean_sep.csv"))
 ```
 
 ## Model
 ```{r}
 #| warning: false
 
-spec_list <- unique(nmix_clean$species_ves)
+spec_list <- unique(nmix_clean_sep$species_ves)
 
 lambda_results <- vector('list', length(spec_list))
 detection_results <- vector('list', length(spec_list))
