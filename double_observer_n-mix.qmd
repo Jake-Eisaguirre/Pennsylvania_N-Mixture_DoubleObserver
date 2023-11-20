@@ -108,7 +108,7 @@ covs <- dbGetQuery(connection, cov_q) %>%
 ```{r}
 
 # prep raw visit table for number of visits and number of observers
-ndays <- 1
+ndays <- 2
 nmix_raw_visits <- nmix_raw_visits_q %>% 
   arrange(date) %>% 
   select(site, date, observer) %>% 
@@ -174,6 +174,8 @@ nmix_clean <-  nmix_raw_visits %>%
          n_visit = case_when(obs_n == "obs_2" ~ n_visit + 3,
                              obs_n == "obs_3" ~ n_visit + 6,
                              obs_n == "obs_4" ~ n_visit + 9,
+                             obs_n == "obs_5" ~ n_visit + 12,
+                             obs_n == "obs_6" ~ n_visit + 15,
                              obs_n == "obs_1" ~ n_visit)) %>% 
   arrange(n_visit) %>% 
   mutate(n_visit = paste("visit_", n_visit, sep = "")) %>% 
@@ -198,12 +200,11 @@ for (i in 1:length(spec_list)) {
   
   # Pivot table and filter species    
   nmix_table <- nmix_clean %>% 
-        filter(species_ves == spec_list[i]) %>%
+        filter(species_ves == spec_list[10]) %>%
         select(!c(species_ves)) %>% 
         pivot_wider(id_cols = c("site", "visit_group", "area_sqr_m", "season"), names_from = n_visit, values_from = n) %>% 
         drop_na(visit_2) %>% 
         select(!c(visit_group))
-      
       
       
   umf <- unmarkedFramePCount(y = nmix_table[4:12],
@@ -236,10 +237,10 @@ lambda_results <- setNames(lambda_results, c(spec_list))
 ## View Model Results
 ```{r}
 # Transformed Abundance
-lambda_results
+lambda_results[10]
 
 # Detection
-detection_results
+detection_results[10]
 
 ```
 
@@ -285,7 +286,7 @@ for (i in 1:length(spec_list)){
     #drop_na(visit_1) %>%  # What to do about observer who was only there for the second repeat day but not 1st or 2nd?
     select(!c(obs_n, visit_group, area_sqr_m))
   
-  obsCovs <- nmix_clean_sep %>% 
+  obsCovs_sep <- nmix_clean_sep %>% 
     select(site, visit_group, obs_n, n_visit, season, air_temp_c, j_date, species_ves) %>% 
     filter(species_ves == spec_list[i]) %>%
     select(!c(species_ves)) %>% 
@@ -306,22 +307,22 @@ for (i in 1:length(spec_list)){
   
   umf <- unmarkedFramePCount(y = nmix_table[3:5],
                             siteCovs = nmix_table[1:3],
-                            obsCovs = list(air_temp = obsCovs[1:3],
-                                           date = obsCovs[4:6],
-                                           site = obsCovs[7:9],
-                                           season = obsCovs[10:12]))
+                            obsCovs = list(air_temp = obsCovs_sep[1:3],
+                                           date = obsCovs_sep[4:6],
+                                           site = obsCovs_sep[7:9],
+                                           season = obsCovs_sep[10:12]))
   
   
   
-  fm1 <- pcount(~air_temp ~ site, 
+  fm1 <- pcount(~1 ~ site, 
                 data = umf,
                 K = 150)
   
   lam <- plogis(coef(fm1, type = "state"))
-  lambda_results[[i]] <- lam
+  lambda_results_sep[[i]] <- lam
   
-  det <- plogis(coef(fm1, "det"))
-  detection_results[[i]] <- det
+  det <- backTransform(fm1, "det")
+  detection_results_sep[[i]] <- det
   
   
   # Error checking during loop
@@ -329,19 +330,19 @@ for (i in 1:length(spec_list)){
 
 }
 
-detection_results <- setNames(detection_results, c(spec_list))
+detection_results_sep <- setNames(detection_results_sep, c(spec_list))
 
-lambda_results <- setNames(lambda_results, c(spec_list))
+lambda_results_sep <- setNames(lambda_results_sep, c(spec_list))
 
                                                                                                                        
 ```
 ## View Model Results
 ```{r}
 # Transformed Abundance
-lambda_results
+lambda_results_sep[10]
 
 # Detection
-detection_results
+detection_results_sep[10]
 
 ```
 
