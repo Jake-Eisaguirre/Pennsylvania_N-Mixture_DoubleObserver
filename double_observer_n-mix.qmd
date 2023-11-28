@@ -200,7 +200,7 @@ for (i in 1:length(spec_list)) {
   
   # Pivot table and filter species    
   nmix_table <- nmix_clean %>% 
-        filter(species_ves == spec_list[10]) %>%
+        filter(species_ves == spec_list[i]) %>%
         select(!c(species_ves)) %>% 
         pivot_wider(id_cols = c("site", "visit_group", "area_sqr_m", "season"), names_from = n_visit, values_from = n) %>% 
         drop_na(visit_2) %>% 
@@ -210,7 +210,7 @@ for (i in 1:length(spec_list)) {
   umf <- unmarkedFramePCount(y = nmix_table[4:12],
                              siteCovs = nmix_table[1:3])
       # -1 + 
-  fm1 <- pcount(~ 1 ~ site, 
+  fm1 <- pcount(~ 1 ~ -1+site, 
                 data = umf,
                 K = 150)
       
@@ -273,8 +273,8 @@ nmix_clean_sep <-  nmix_raw_visits %>%
 
 spec_list <- unique(nmix_clean_sep$species_ves)
 
-lambda_results <- vector('list', length(spec_list))
-detection_results <- vector('list', length(spec_list))
+lambda_results_sep <- vector('list', length(spec_list))
+detection_results_sep <- vector('list', length(spec_list))
 
 for (i in 1:length(spec_list)){
   
@@ -314,7 +314,7 @@ for (i in 1:length(spec_list)){
   
   
   
-  fm1 <- pcount(~1 ~ site, 
+  fm1 <- pcount(~1 ~ -1+site, 
                 data = umf,
                 K = 150)
   
