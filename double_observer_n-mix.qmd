@@ -127,6 +127,10 @@ nmix_raw_visits <- nmix_raw_visits_q %>%
   ungroup() %>% 
   select(!c(observer))
 
+
+  
+
+
 # sum counts across observers and count number of obs
 n_mix_mid_clean_up <- nmix_raw_data %>% 
   group_by(date, site, observer, species_ves) %>% 
@@ -139,7 +143,7 @@ n_mix_mid_clean_up <- nmix_raw_data %>%
 
 # pull out visits
 visits <- nmix_raw_visits %>% 
-  select(site, date, obs_n, n_visit)
+  select(site, date, obs_n, n_visit) 
 
 # covariates
 covariates <- covs %>% 

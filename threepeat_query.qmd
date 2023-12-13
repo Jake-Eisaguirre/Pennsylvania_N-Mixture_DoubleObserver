@@ -1,0 +1,94 @@
+---
+title: "threepeat_query"
+format: html
+editor: source
+---
+
+## Load Packages
+
+```{r}
+#| output: false
+if (!require(librarian)){
+  install.packages("librarian")
+  library(librarian)
+}
+
+librarian::shelf(tidyverse, RPostgres, DBI, unmarked, here, lubridate, tidyr)
+
+```
+
+## Connect to `survey_data` schema in `ribbitr` database
+```{r}
+#| output: false
+tryCatch({
+    drv <- dbDriver("Postgres")
+    print("Connecting to Database…")
+    connection <- dbConnect(drv,
+                 dbname = Sys.getenv("aws_dbname"),
+                 host = Sys.getenv("aws_host"),
+                 port = Sys.getenv("aws_port"),
+                 user = Sys.getenv("aws_user"),
+                 password = Sys.getenv("aws_password"),
+                 timezone=NULL)
+    print("Database Connected!")
+    },
+    error=function(cond) {
+            print("Unable to connect to Database.")
+    })
+
+#search path
+dbExecute(connection, "set search_path to survey_data")
+
+
+
+```
+
+## QueryN-Mix Penn data
+```{r}
+
+# find all visits
+visit_nmix_q <- "select r.region, s.site, v.date, v.survey_time, s2.detection_type, s2.observer
+                from region r
+                join site s on r.region_id = s.region_id 
+                join visit v on s.site_id = v.site_id 
+                join survey s2 on v.visit_id = s2.visit_id
+                where r.region = 'pennsylvania'
+                and v.date > '2022-01-01'
+                and s2.detection_type = 'visual';"
+
+
+
+nmix_raw_visits_q <-dbGetQuery(connection, visit_nmix_q) %>% 
+  mutate(observer = if_else(site == "rv_pond" & date == "2023-06-05",
+                            "Jae,Rachel Verdi", observer),
+         observer = if_else(site == "rv_pond" & date == "2023-06-06",
+                            "Jae,Rachel Verdi,Luci Anaya", observer),
+         observer = if_else(site == "tuttle_pond" & date == "2023-05-30",
+                            "Abby Trauffer,Brandon Hoenig", observer))
+
+
+
+
+ndays <- 2
+
+nmix_raw_visits <- nmix_raw_visits_q %>% 
+  arrange(date) %>% 
+  select(site, date, observer) %>% 
+  mutate(near = (lag(date, default = first(date)) + ndays < date) |> cumsum(), .by = site) %>%  
+  mutate(n_visit = rep(list(1,2,3), length.out = n()), .by = c(site, near)) %>% 
+  mutate(visit_group = cumsum(n_visit == 1), .by = site,
+         n_visit = paste("visit_", n_visit, sep=""),
+         observer = if_else(observer == "", "Myah Madril, Rachel Verdi", observer)) %>% 
+  arrange(site) %>% 
+  ungroup() %>% 
+  group_by(site, near) %>%
+  mutate(threepeat = "",
+         threepeat = if_else(n() > 2, "1", "0")) %>% 
+  ungroup() %>% 
+  select(site, date, threepeat) %>% 
+  write_csv(here("threepeat_sites.csv"))
+
+
+```
+
+
